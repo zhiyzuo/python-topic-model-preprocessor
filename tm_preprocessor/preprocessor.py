@@ -120,7 +120,8 @@ class Preprocessor(object):
                 frequency[token] += 1
 
         self.corpus = np.asarray([[token for token in doc \
-                                   if frequency[token] > min_freq and len(token) > 1] \
+                                   if frequency[token] >= min_freq and\
+                                   len(token) >= min_length] \
                                    for doc in corpus])
 
     def serialize(self, path='.', format_='MmCorpus'):
