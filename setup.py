@@ -9,6 +9,7 @@ https://github.com/pypa/sampleproject
 from setuptools import setup, find_packages
 # To use a consistent encoding
 from codecs import open
+import tm_preprocessor
 from os import path
 
 here = path.abspath(path.dirname(__file__))
@@ -17,13 +18,14 @@ here = path.abspath(path.dirname(__file__))
 with open(path.join(here, 'README.rst'), encoding='utf-8') as f:
     long_description = f.read()
 
+
 setup(
     name='python-topic-model-preprocessor',
 
     # Versions should comply with PEP440.  For a discussion on single-sourcing
     # the version across setup.py and the project code, see
     # https://packaging.python.org/en/latest/single_source_version.html
-    version='0.0.1',
+    version=tm_preprocessor.__version__,
 
     description='A helper class for facilitating preprocessing of text corpus before any topic modeling algorithms',
     long_description=long_description,
@@ -32,7 +34,7 @@ setup(
     url='https://github.com/zhiyzuo/python-topic-model-preprocessor',
 
     # Author details
-    author='Zhiya Zuo',
+    author=tm_preprocessor.__author__,
     author_email='zhiyazuo@gmail.com',
 
     # Choose your license
@@ -47,7 +49,6 @@ setup(
         'Development Status :: 3 - Alpha',
 
         # Indicate who your project is intended for
-        'Intended Audience :: Developers',
         'Intended Audience :: Education',
         'Intended Audience :: Science/Research',
         'Intended Audience :: Information Technology',
@@ -93,7 +94,7 @@ setup(
     # installed, specify them here.  If using Python 2.6 or less, then these
     # have to be included in MANIFEST.in as well.
     package_data={
-        'tm_preprocessor': ['stopwords.csv'],
+        'tm_preprocessor': ['data/stopwords.csv'],
     }
 
     # Although 'package_data' is the preferred approach, in some case you may

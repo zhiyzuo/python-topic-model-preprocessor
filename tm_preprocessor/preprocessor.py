@@ -63,7 +63,7 @@ class Preprocessor(object):
         self.punctuations = punctuations
         if stopword_file is None:
             self.stopwords = np.loadtxt(pkg_resources.resource_stream('tm_preprocessor', \
-                                                                      '../data/stopwords.csv'), \
+                                                                      'data/stopwords.csv'), \
                                         dtype=str)
         else:
             self.stopwords = np.loadtxt(stopword_file, dtype=str)
