@@ -41,7 +41,7 @@ class Preprocessor(object):
     """
 
     def __init__(self, documents, \
-                 punctuations='''"!@#$%^*(),.:;&=+-_?\\\'`''', \
+                 punctuations=r'''"!@#$%^*(),.:;&=+-_?\'`[]''', \
                  stopword_file=None):
         ''' Init function for `Preprocessor` class
 
@@ -52,15 +52,18 @@ class Preprocessor(object):
             documents : iteratble object (list/tuple/numpy array...)
                 A list of documents. This should not be altered throughout the processing
             punctuations : str
-                String sequence of punctuations to be removed. By default: "!@#$%^*(),.:;&=+-_?'`\\
+                String sequence of punctuations to be removed. By default: "[!@#$%^*(),.:;&=+-_?'`\\
             stopword_file : str
                 File path for stop word list. By default use pre-defined stopwords.
         '''
 
         self.corpus = None
         self.vocabulary = None
-        self.documents = documents
         self.punctuations = punctuations
+
+        ## escape backslahes
+        self.documents = [doc.encode('string-escape') for doc in documents]
+
         if stopword_file is None:
             self.stopwords = np.loadtxt(pkg_resources.resource_stream('tm_preprocessor', \
                                                                       'data/stopwords.csv'), \
@@ -106,12 +109,16 @@ class Preprocessor(object):
                 The minimum length of a token to be kept
         '''
 
+        if self.corpus is None:
+            print('Remove digits and punctuations first...')
+            self.remove_digits_punctuactions()
+
         ## remove stop words, stem, and tokenize them (lower case)
         if stemmer is None:
-            corpus = np.array([[word for word in doc.lower().split() \
+            corpus = np.array([[unicode(word) for word in doc.lower().split() \
                                 if word not in self.stopwords] for doc in self.corpus])
         else:
-            corpus = np.array([[stemmer.stem(word) for word in doc.lower().split() \
+            corpus = np.array([[unicode(stemmer.stem(word)) for word in doc.lower().split() \
                                   if word not in self.stopwords] for doc in self.corpus])
         ## keep words occur more than once and more than one letter
         frequency = defaultdict(int)
@@ -119,10 +126,10 @@ class Preprocessor(object):
             for token in doc:
                 frequency[token] += 1
 
-        self.corpus = np.asarray([[token for token in doc \
-                                   if frequency[token] >= min_freq and\
-                                   len(token) >= min_length] \
-                                   for doc in corpus])
+        self.corpus = np.array([[token for token in doc \
+                                 if frequency[token] >= min_freq and\
+                                 len(token) >= min_length] \
+                                 for doc in corpus])
 
     def serialize(self, path='.', format_='MmCorpus'):
         '''
@@ -147,7 +154,8 @@ class Preprocessor(object):
 
             ## serialize corpus
             corpus_vector = [self.dictionary.doc2bow(doc) for doc in self.corpus]
-            exec("corpora.%s.serialize('%s/corpus_%s.dump', corpus_vector)"%(format_, path, format_))
+            exec("corpora.%s.serialize('%s/corpus_%s.dump', \
+                  corpus_vector, id2word=self.dictionary)"%(format_, path, format_))
 
     def get_word_ranking(self):
         '''
