@@ -1,11 +1,20 @@
-import warnings
 import numpy as np
 import pandas as pd
-import pkg_resources
 from nltk.stem import *
 from gensim import corpora
+import warnings, sys, pkg_resources
 from collections import defaultdict
-from string import digits, maketrans
+
+from tm_preprocessor import utils
+
+MAJOR_VERSION = sys.version_info[0]
+if MAJOR_VERSION < 3:
+    from string import digits, maketrans
+    escape_encoding = 'string-escape'
+else:
+    from string import digits
+    maketrans = str.maketrans
+    escape_encoding = 'unicode_escape'
 
 class Preprocessor(object):
     """
@@ -31,7 +40,7 @@ class Preprocessor(object):
         add_stopwords(additional_stopwords)
             Add additional stop words (`additional_stopwords`) to `self.stopwords`.
         tokenize(stemmer, min_freq, min_length)
-            Tokenize the corpus into bag of words using the specified `stemmer` and 
+            Tokenize the corpus into bag of words using the specified `stemmer` and
             minimum frequency (`min_freq`) and length (`min_length`) of words/tokens.
         serialize(path, format_)
             Serialize corpus in `format_` and build vocabulary. Save dump files to `path`.
@@ -62,7 +71,7 @@ class Preprocessor(object):
         self.punctuations = punctuations
 
         ## escape backslahes
-        self.documents = [doc.encode('string-escape') for doc in documents]
+        self.documents = [doc.encode(escape_encoding).decode() for doc in documents]
 
         if stopword_file is None:
             self.stopwords = np.loadtxt(pkg_resources.resource_stream('tm_preprocessor', \
@@ -77,10 +86,18 @@ class Preprocessor(object):
 
         replace_punctuation = maketrans(self.punctuations, ' '*len(self.punctuations))
         replace_digits = maketrans(digits, ' '*len(digits))
-        corpus = np.asarray([doc.encode('ascii', 'ignore').translate(replace_digits, digits) \
-                                  for doc in self.documents])
-        self.corpus = np.asarray([doc.translate(replace_punctuation, self.punctuations) \
-                                  for doc in corpus])
+
+        if MAJOR_VERSION < 3:
+            corpus = np.asarray([doc.encode('ascii', 'ignore').decode().translate(replace_digits, digits) \
+                                 for doc in self.documents])
+            self.corpus = np.asarray([doc.translate(replace_punctuation, self.punctuations) \
+                                      for doc in corpus])
+        else:
+            corpus = np.asarray([doc.encode('ascii', 'ignore').decode().translate(replace_digits) \
+                                 for doc in self.documents])
+            self.corpus = np.asarray([doc.translate(replace_punctuation) \
+                                      for doc in corpus])
+
 
     def add_stopwords(self, additional_stopwords):
         '''
@@ -115,10 +132,10 @@ class Preprocessor(object):
 
         ## remove stop words, stem, and tokenize them (lower case)
         if stemmer is None:
-            corpus = np.array([[unicode(word) for word in doc.lower().split() \
+            corpus = np.array([[utils._to_unicode(word) for word in doc.lower().split() \
                                 if word not in self.stopwords] for doc in self.corpus])
         else:
-            corpus = np.array([[unicode(stemmer.stem(word)) for word in doc.lower().split() \
+            corpus = np.array([[utils._to_unicode(stemmer.stem(word)) for word in doc.lower().split() \
                                   if word not in self.stopwords] for doc in self.corpus])
         ## keep words occur more than once and more than one letter
         frequency = defaultdict(int)
@@ -176,7 +193,6 @@ class Preprocessor(object):
         for doc in self.corpus:
             for word in doc:
                 frequency[word] += 1
-        count_df = pd.DataFrame(frequency.items(), \
+        count_df = pd.DataFrame(list(frequency.items()), \
                                 columns=['word', 'frequency'])
-        return count_df.sort_values('frequency', ascending=False)
-
+        return count_df.sort_values('frequency', ascending=False).reset_index(drop=True)
