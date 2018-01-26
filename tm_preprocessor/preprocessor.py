@@ -1,6 +1,6 @@
+import nltk
 import numpy as np
 import pandas as pd
-from nltk.stem import *
 from gensim import corpora
 import warnings, sys, pkg_resources
 from collections import defaultdict
@@ -35,13 +35,11 @@ class Preprocessor(object):
 
         Methods
         -------
-        remove_digits_punctuactions()
-            Remove both digits and punctuations in the corpus.
         add_stopwords(additional_stopwords)
             Add additional stop words (`additional_stopwords`) to `self.stopwords`.
-        tokenize(stemmer, min_freq, min_length)
-            Tokenize the corpus into bag of words using the specified `stemmer` and
-            minimum frequency (`min_freq`) and length (`min_length`) of words/tokens.
+        tokenize(normalizer, min_freq, max_freq, min_length)
+            Tokenize the corpus into bag of words using the specified `stemmer` or `lemmatizer` and
+            minimum/maximum frequency (`min_freq` and `max_freq`) and length (`min_length`) of words/tokens.
         serialize(path, format_)
             Serialize corpus in `format_` and build vocabulary. Save dump files to `path`.
         get_word_ranking()
@@ -80,23 +78,8 @@ class Preprocessor(object):
         else:
             self.stopwords = np.loadtxt(stopword_file, dtype=str)
 
-    def remove_digits_punctuactions(self):
-        ''' Remove digits and punctuations
-        '''
-
-        replace_punctuation = maketrans(self.punctuations, ' '*len(self.punctuations))
-        replace_digits = maketrans(digits, ' '*len(digits))
-
-        if MAJOR_VERSION < 3:
-            corpus = np.asarray([doc.encode('ascii', 'ignore').decode().translate(replace_digits, digits) \
-                                 for doc in self.documents])
-            self.corpus = np.asarray([doc.translate(replace_punctuation, self.punctuations) \
-                                      for doc in corpus])
-        else:
-            corpus = np.asarray([doc.encode('ascii', 'ignore').decode().translate(replace_digits) \
-                                 for doc in self.documents])
-            self.corpus = np.asarray([doc.translate(replace_punctuation) \
-                                      for doc in corpus])
+        #self.corpus = np.array([nltk.word_tokenize(doc) for doc in self.documents])
+        #self.corpus = np.array([[token.lower() for token in doc] for doc in self.corpus])
 
 
     def add_stopwords(self, additional_stopwords):
@@ -112,41 +95,49 @@ class Preprocessor(object):
         self.stopwords = np.insert(self.stopwords, 0, \
                                    additional_stopwords)
 
-    def tokenize(self, stemmer=PorterStemmer(), min_freq=1, min_length=1):
+    def normalize(self, normalizer,
+                  min_freq=.05, max_freq= .95, min_length=1):
         '''
-            Tokenize the corpus into bag of words
+            Normalize corpus by either lemmatization or stemming. Also remove rare/common and short words
 
             Parameters
             ----------
-            stemmer : nltk.stem stemmers
-                Stemmer to use (Porter by default). See http://www.nltk.org/api/nltk.stem.html. If `None`, do not stem.
-            min_freq : int
-                The minimum frequency of a token to be kept
+            stemmer : nltk.stem stemmers or lemmatizers
+                Stemmer/lemmatizer to use. See http://www.nltk.org/api/nltk.stem.html. If `None`, do not stem.
+            min_freq : float
+                The minimum frequency (in ratio) of a token to be kept
+            max_freq : float
+                The maximum frequency (in ratio) of a token to be kept
             min_length : int
                 The minimum length of a token to be kept
         '''
-
-        if self.corpus is None:
-            print('Remove digits and punctuations first...')
-            self.remove_digits_punctuactions()
-
         ## remove stop words, stem, and tokenize them (lower case)
-        if stemmer is None:
-            corpus = np.array([[utils._to_unicode(word) for word in doc.lower().split() \
-                                if word not in self.stopwords] for doc in self.corpus])
+        if normalizer is None:
+            self.corpus = np.array([[utils._to_unicode(word) for word in doc]\
+                                     for doc in self.corpus])
+        elif 'lemma' in str(type(normalizer)).lower():
+            # if lemmatize, give the tags as well
+            self.corpus = utils._post_tag(self.corpus)
+            #print(self.corpus)
+            self.corpus = [[utils._to_unicode(normalizer.lemmatize(word, tag)) for word, tag in doc]\
+                            for doc in self.corpus]
         else:
-            corpus = np.array([[utils._to_unicode(stemmer.stem(word)) for word in doc.lower().split() \
-                                  if word not in self.stopwords] for doc in self.corpus])
-        ## keep words occur more than once and more than one letter
-        frequency = defaultdict(int)
-        for doc in corpus:
-            for token in doc:
-                frequency[token] += 1
+            self.corpus = [[utils._to_unicode(normalizer.stem(word)) for word in doc]\
+                            for doc in self.corpus]
 
-        self.corpus = np.array([[token for token in doc \
-                                 if frequency[token] >= min_freq and\
-                                 len(token) >= min_length] \
-                                 for doc in corpus])
+        ## keep words occur more than once and more than one letter
+        frequency_dict = defaultdict(int)
+        total_count = 0
+        for doc in self.corpus:
+            for token in doc:
+                frequency_dict[token] += 1
+                total_count += 1
+
+        self.corpus = [[token for token in doc \
+                        if frequency_dict[token]/total_count >= min_freq and\
+                           frequency_dict[token]/total_count <= max_freq and\
+                           len(token) >= min_length] \
+                        for doc in self.corpus]
 
     def serialize(self, path='.', format_='MmCorpus'):
         '''
@@ -196,3 +187,23 @@ class Preprocessor(object):
         count_df = pd.DataFrame(list(frequency.items()), \
                                 columns=['word', 'frequency'])
         return count_df.sort_values('frequency', ascending=False).reset_index(drop=True)
+
+    def remove_digits_punctuactions(self):
+
+        replace_punctuation = maketrans(self.punctuations, ' '*len(self.punctuations))
+        replace_digits = maketrans(digits, ' '*len(digits))
+
+        if MAJOR_VERSION < 3:
+            self.corpus = [doc.translate(replace_punctuation, self.punctuations)\
+                           for doc in self.documents]
+            self.corpus = [doc.translate(replace_digits, digits).lower().split()\
+                           for doc in self.corpus]
+        else:
+            self.corpus = [doc.translate(replace_punctuation)\
+                           for doc in self.documents]
+            self.corpus = [doc.translate(replace_digits).lower().split()\
+                           for doc in self.corpus]
+
+    def remove_stopwords(self):
+        self.corpus = [[word for word in doc if word not in self.stopwords]\
+                        for doc in self.corpus]
